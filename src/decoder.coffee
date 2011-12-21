@@ -75,7 +75,7 @@ class TTADecoder extends Decoder
             sum += dl[dl_i++] * qm[qm_i++]
             sum += dl[dl_i++] * qm[qm_i++]
             sum += dl[dl_i++] * qm[qm_i++]
-            dx += 8
+            dx_i += 8
             
         else if c.error < 0
             sum += dl[dl_i++] * (qm[qm_i++] -= dx[dx_i++])
@@ -96,7 +96,7 @@ class TTADecoder extends Decoder
             sum += dl[dl_i++] * (qm[qm_i++] += dx[dx_i++])
             sum += dl[dl_i++] * (qm[qm_i++] += dx[dx_i++])
             sum += dl[dl_i++] * (qm[qm_i++] += dx[dx_i++])
-            
+        
         dx[dx_i - 0] = ((dl[dl_i - 1] >> 30) | 1) << 2
         dx[dx_i - 1] = ((dl[dl_i - 2] >> 30) | 1) << 1
         dx[dx_i - 2] = ((dl[dl_i - 3] >> 30) | 1) << 1
@@ -132,10 +132,9 @@ class TTADecoder extends Decoder
             ttafilter_init(channels[i], ttafilter_configs[bps - 1])
             rice_init(channels[i], 10, 10)                    
         
-        cur_chan = 0
+        cur_chan = 0; j = 0
         for p in [0...frameLen * numChannels] by 1
             {predictor, filter, rice} = channels[cur_chan]
-            
             unary = tta_get_unary(stream)
             
             if unary is 0
@@ -152,7 +151,7 @@ class TTADecoder extends Decoder
                 value = (unary << k) + stream.read(k)
             else
                 value = unary
-                
+            
             switch depth
                 when 1
                     rice.sum1 += value - (rice.sum1 >>> 4)
@@ -167,7 +166,7 @@ class TTADecoder extends Decoder
                 else
                     rice.sum0 += value - (rice.sum0 >>> 4)
                     
-                    if rice.k0 > 0 && rice.sum0 < shift_16[rice.k0]
+                    if rice.k0 > 0 and rice.sum0 < shift_16[rice.k0]
                         rice.k0--
                     else if rice.sum0 > shift_16[rice.k0 + 1]
                         rice.k0++
@@ -181,11 +180,11 @@ class TTADecoder extends Decoder
             # fixed order prediction
             switch bps
                 when 1
-                    p += ((predictor << 4) - predictor) >> k
+                    decode_buffer[p] += ((predictor << 4) - predictor) >> 4
                 when 2, 3
-                    p += ((predictor << 5) - predictor) >> k
+                    decode_buffer[p] += ((predictor << 5) - predictor) >> 5
                 when 4
-                    p += predictor
+                    decode_buffer[p] += predictor
                     
             channels[cur_chan].predictor = decode_buffer[p]
             
@@ -199,8 +198,8 @@ class TTADecoder extends Decoder
                     decode_buffer[p] += decode_buffer[r] / 2
                     while r > p - numChannels
                         decode_buffer[r] = decode_buffer[r + 1] - decode_buffer[r]
+                        r--
                     
-                console.log 'hi'
                 cur_chan = 0
                 
         stream.advance(32) # skip frame crc
