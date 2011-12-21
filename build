@@ -1,0 +1,9 @@
+#! /bin/sh
+
+cd `dirname $0`
+
+if [ ! -d "vendor/aurora.js" ]; then
+  git clone https://github.com/JensNockert/aurora.js.git vendor/aurora.js
+fi
+
+cd vendor/aurora.js && git pull && cd `dirname $0`
