@@ -132,7 +132,7 @@ class TTADecoder extends Decoder
             ttafilter_init(channels[i], ttafilter_configs[bps - 1])
             rice_init(channels[i], 10, 10)                    
         
-        cur_chan = 0; j = 0
+        cur_chan = 0
         for p in [0...frameLen * numChannels] by 1
             {predictor, filter, rice} = channels[cur_chan]
             unary = tta_get_unary(stream)
