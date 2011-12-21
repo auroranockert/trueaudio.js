@@ -173,10 +173,10 @@ class TTADecoder extends Decoder
                         rice.k0++
                         
             # extract coded value
-            decode_buffer[p] = if value & 1 then ++value >>> 1 else -value >> 1
+            decode_buffer[p] = if value & 1 then ++value >> 1 else -value >> 1
             
             # run hybrid filter
-            p = ttafilter_process(filter, p)
+            decode_buffer[p] = ttafilter_process(filter, decode_buffer[p])
             
             # fixed order prediction
             switch bps
@@ -187,20 +187,33 @@ class TTADecoder extends Decoder
                 when 4
                     p += predictor
                     
-            channels[cur_chan].predictor = p
+            channels[cur_chan].predictor = decode_buffer[p]
             
             # flip channels
             if cur_chan < numChannels - 1
                 cur_chan++
             else
                 # decorrelate in case of stereo integer
-                #if numChannels > 1
+                if numChannels > 1
+                    r = p - 1
+                    decode_buffer[p] += decode_buffer[r] / 2
+                    while r > p - numChannels
+                        decode_buffer[r] = decode_buffer[r + 1] - decode_buffer[r]
                     
                 console.log 'hi'
                 cur_chan = 0
                 
-            stream.advance(32) # skip frame crc
-            
-            #switch bps
+        stream.advance(32) # skip frame crc
+        
+        switch bps
+            when 1
+                console.log 1
                 
-            
+            when 2
+                #console.log decode_buffer[0]
+                @emit 'data', decode_buffer
+                
+            when 3
+                console.log 3
+        
+        return
