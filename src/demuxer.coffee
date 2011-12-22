@@ -24,10 +24,10 @@ class TTADemuxer extends Demuxer
             @readHeader = true
         
         if @readHeader and not @readSeekTable
-            framelen = @format.sampleRate * 256 / 245
+            framelen = 256 * @format.sampleRate / 245
             datalen = @format.sampleCount
-            totalFrames = datalen / framelen + ((datalen % framelen) ? 1 : 0)
-            seekTableSize = totalFrames * 4 | 0
+            totalFrames = Math.floor(datalen / framelen) + (if datalen % framelen then 1 else 0)
+            seekTableSize = totalFrames * 4
             
             return unless @stream.available(seekTableSize + 4)
             

@@ -8,7 +8,7 @@ class TTADecoder extends Decoder
         [10, 1]
         [9, 1]
         [10, 1]
-        [12, 1]
+        [12, 0]
     ]
     
     shift_1 = new Uint32Array([
@@ -48,12 +48,15 @@ class TTADecoder extends Decoder
         
         # count ones
         while bitstream.available(1) and bitstream.readOne()
+            console.log 'hi'
             ret++
-            
+        
         return ret
         
     memshl = (a) ->
-        a[i = 0] = a[b = 1]
+        i = 0
+        b = 1
+        a[i++] = a[b++]
         a[i++] = a[b++]
         a[i++] = a[b++]
         a[i++] = a[b++]
@@ -148,10 +151,12 @@ class TTADecoder extends Decoder
             return -1 unless stream.available(k)
             
             if k
-                value = (unary << k) + stream.read(k)
+                #value = (unary << k) + stream.readSmall(k, true)
+                console.log k, stream.read(4)
+                throw 'stop'
             else
                 value = unary
-            
+                
             switch depth
                 when 1
                     rice.sum1 += value - (rice.sum1 >>> 4)
