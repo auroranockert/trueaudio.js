@@ -6,12 +6,12 @@ class TTADecoder extends Decoder
     MAX_ORDER = 16
     ttafilter_configs = [
         [10, 1]
-        [9, 1]
+        [ 9, 1]
         [10, 1]
         [12, 0]
     ]
     
-    shift_1 = new Uint32Array([
+    shift_1 = new Uint32Array [
         0x00000001, 0x00000002, 0x00000004, 0x00000008
         0x00000010, 0x00000020, 0x00000040, 0x00000080
         0x00000100, 0x00000200, 0x00000400, 0x00000800
@@ -22,7 +22,7 @@ class TTADecoder extends Decoder
         0x10000000, 0x20000000, 0x40000000, 0x80000000
         0x80000000, 0x80000000, 0x80000000, 0x80000000
         0x80000000, 0x80000000, 0x80000000, 0x80000000
-    ])
+    ]
     
     shift_16 = shift_1.subarray(4)
     
@@ -32,6 +32,7 @@ class TTADecoder extends Decoder
             shift: shift
             round: shift_1[shift - 1]
             mode: mode
+            error: 0
             qm: new Int32Array(MAX_ORDER)
             dx: new Int32Array(MAX_ORDER)
             dl: new Int32Array(MAX_ORDER)
@@ -47,8 +48,7 @@ class TTADecoder extends Decoder
         ret = 0
         
         # count ones
-        while bitstream.available(1) and bitstream.readOne()
-            console.log 'hi'
+        while bitstream.available(1) and bitstream.readLSB(1)
             ret++
         
         return ret
@@ -110,10 +110,21 @@ class TTADecoder extends Decoder
         p += (sum >> c.shift)
         dl[dl_i] = p
         
+        if c.mode
+            dl[dl_i - 1] = dl[dl_i - 0] - dl[dl_i - 1]
+            dl[dl_i - 2] = dl[dl_i - 1] - dl[dl_i - 2]
+            dl[dl_i - 3] = dl[dl_i - 2] - dl[dl_i - 3]
+        
         memshl(dl)
         memshl(dx)
         
         return p
+        
+    init: ->
+        frameLen = 256 * @format.sampleRate / 245
+        dataLen = @format.sampleCount
+        @lastFrameLength = dataLen % frameLen
+        @frames = Math.floor(dataLen / frameLen) + (if @lastFrameLength > 0 then 1 else 0)
         
     readChunk: =>
         frameLen = 256 * @format.sampleRate / 245
@@ -121,9 +132,10 @@ class TTADecoder extends Decoder
         bps = (@format.bitsPerChannel + 7) / 8 | 0
         stream = @bitstream
         
-        unless stream.available(frameLen)
-            return @once 'available', @readChunk
+        if --@frames is 0 and @lastFrameLength > 0
+            frameLen = @lastFrameLength
         
+        start = stream.offset()            
         decode_buffer = new Int32Array(frameLen * numChannels)
         
         # init per channel states
@@ -131,9 +143,13 @@ class TTADecoder extends Decoder
         for i in [0...numChannels] by 1
             channels[i] = 
                 predictor: 0
+                rice:
+                    k0: 10
+                    k1: 10
+                    sum0: shift_16[10]
+                    sum1: shift_16[10]
                 
             ttafilter_init(channels[i], ttafilter_configs[bps - 1])
-            rice_init(channels[i], 10, 10)                    
         
         cur_chan = 0
         for p in [0...frameLen * numChannels] by 1
@@ -147,35 +163,35 @@ class TTADecoder extends Decoder
                 depth = 1
                 k = rice.k1
                 unary--
-                
-            return -1 unless stream.available(k)
+            
+            unless stream.available(k)
+                # whoa, buffer overrun! back it up...
+                stream.advance(start - stream.offset())
+                @frames++
+                return @once 'available', @readChunk
             
             if k
-                #value = (unary << k) + stream.readSmall(k, true)
-                console.log k, stream.read(4)
-                throw 'stop'
+                value = (unary << k) + stream.readLSB(k)
             else
                 value = unary
                 
-            switch depth
-                when 1
-                    rice.sum1 += value - (rice.sum1 >>> 4)
+            if depth is 1
+                rice.sum1 += value - (rice.sum1 >>> 4)
+                
+                if rice.k1 > 0 and rice.sum1 < shift_16[rice.k1]
+                    rice.k1--
+                else if rice.sum1 > shift_16[rice.k1 + 1]
+                    rice.k1++
                     
-                    if rice.k1 > 0 and rice.sum1 < shift_16[rice.k1]
-                        rice.k1--
-                    else if rice.sum1 > shift_16[rice.k1 + 1]
-                        rice.k1++
-                        
-                    value += shift_1[rice.k0]
-                    
-                else
-                    rice.sum0 += value - (rice.sum0 >>> 4)
-                    
-                    if rice.k0 > 0 and rice.sum0 < shift_16[rice.k0]
-                        rice.k0--
-                    else if rice.sum0 > shift_16[rice.k0 + 1]
-                        rice.k0++
-                        
+                value += shift_1[rice.k0]
+                
+            rice.sum0 += value - (rice.sum0 >>> 4)
+            
+            if rice.k0 > 0 and rice.sum0 < shift_16[rice.k0]
+                rice.k0--
+            else if rice.sum0 > shift_16[rice.k0 + 1]
+                rice.k0++
+                                        
             # extract coded value
             decode_buffer[p] = if value & 1 then ++value >> 1 else -value >> 1
             
@@ -200,7 +216,8 @@ class TTADecoder extends Decoder
                 # decorrelate in case of stereo integer
                 if numChannels > 1
                     r = p - 1
-                    decode_buffer[p] += decode_buffer[r] / 2
+                    decode_buffer[p] += decode_buffer[r] / 2 | 0
+                    
                     while r > p - numChannels
                         decode_buffer[r] = decode_buffer[r + 1] - decode_buffer[r]
                         r--
@@ -208,16 +225,15 @@ class TTADecoder extends Decoder
                 cur_chan = 0
                 
         stream.advance(32) # skip frame crc
+        stream.align()
         
         switch bps
             when 1
-                console.log 1
-                
-            when 2
-                #console.log decode_buffer[0]
-                @emit 'data', decode_buffer
+                for i in [0...decode_buffer.length] by 1
+                    decode_buffer[i] += 0x80
                 
             when 3
-                console.log 3
-        
-        return
+                for i in [0...decode_buffer.length] by 1
+                    decode_buffer[i] <<= 8
+                    
+        @emit 'data', decode_buffer

@@ -37,6 +37,8 @@ class TTADemuxer extends Demuxer
             @readSeekTable = true
             
         if @readSeekTable
-            @emit 'data', @stream.readSingleBuffer(@stream.list.availableBytes - @stream.localOffset)
+            while @stream.available(1)
+                buf = @stream.readSingleBuffer(@stream.remainingBytes())
+                @emit 'data', buf, @stream.remainingBytes() is 0
             
         return
