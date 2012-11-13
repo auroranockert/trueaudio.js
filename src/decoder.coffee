@@ -1,5 +1,5 @@
-class TTADecoder extends Decoder
-    Decoder.register('tta', TTADecoder)
+class TTADecoder extends AV.Decoder
+    AV.Decoder.register('tta', TTADecoder)
     
     FORMAT_SIMPLE = 1
     FORMAT_ENCRYPTED = 2

@@ -1,5 +1,5 @@
-class TTADemuxer extends Demuxer
-    Demuxer.register(TTADemuxer)
+class TTADemuxer extends AV.Demuxer
+    AV.Demuxer.register(TTADemuxer)
     
     @probe: (buffer) ->
         return buffer.peekString(0, 4) is 'TTA1'
