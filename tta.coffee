@@ -1,2 +1,2 @@
-#import "demuxer.coffee"
-#import "decoder.coffee"
+#import "src/demuxer.coffee"
+#import "src/decoder.coffee"
